@@ -37,3 +37,5 @@ class ReviewState(TypedDict):
     
     ## graceful degradation tracking
     failed_files: Annotated[list[str], operator.add]
+
+    is_stale: bool
