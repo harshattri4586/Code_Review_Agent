@@ -12,6 +12,9 @@ def get_github_client() -> Github:
     token = os.environ["GITHUB_TOKEN"]
     return Github(auth= Auth.Token(token))
 
+MAX_FILES = 50
+MAX_TOTAL_CHANGED_LINES = 2000
+
 
 def fetch_diff(state: ReviewState) -> dict:
     """
@@ -27,17 +30,33 @@ def fetch_diff(state: ReviewState) -> dict:
     pr = repo.get_pull(state["pr_number"])
 
     changed_files: list[ChangedFile] = []
+    skipped_files: list[str] = []
+    total_changed_lines = 0
 
     for file in pr.get_files():
         if file.status == "removed":
             continue
 
+        if file.patch is None:
+            skipped_files.append(f"{file.filename} (binary, not reviewable)")
+            continue
+
+        file_lines = file.additions + file.deletions
+
+        if(
+            len(changed_files) >= MAX_FILES or
+            total_changed_lines + file_lines > MAX_TOTAL_CHANGED_LINES
+        ):
+            skipped_files.append(f"{file.filename} (skipped: PR size limit reached)")
+            continue
+
         changed_files.append(
             ChangedFile(
                 filename=file.filename,
-                diff_text=file.patch or "",
+                diff_text=file.patch,
                 status=file.status
             )
         )
+        total_changed_lines += file_lines
 
-    return {"changed_files": changed_files}
+    return {"changed_files": changed_files, "failed_files":skipped_files}
